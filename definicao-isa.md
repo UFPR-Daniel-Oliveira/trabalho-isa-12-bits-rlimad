@@ -9,7 +9,7 @@
 
 # Sumário
 
-1. [Introdução](#introducao)  
+1. [Introdução](#1. Introdução)  
 2. [Requisitos e Restrições](#requisitos-e-restricoes)  
 3. [Decisões de Projeto e Trade-offs](#decisoes-de-projeto-e-trade-offs)  
 4. [Conjunto de Registradores](#conjunto-de-registradores)  
