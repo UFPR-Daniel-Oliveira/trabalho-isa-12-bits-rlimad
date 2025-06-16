@@ -11,10 +11,10 @@
 
 1. [Introdução](#1-introdução)  
 2. [Requisitos e Restrições](#2-requisitos-e-restrições)  
-3. [Decisões de Projeto e Trade-offs](#decisoes-de-projeto-e-trade-offs)  
+3. [Decisões de Projeto e Trade-offs](#3-decisoes-de-projeto)  
 4. [Conjunto de Registradores](#4-conjunto-de-registradores)  
 5. [Formatos de Instrução](#5-formatos-de-instrução)  
-6. [Tabela de Instruções (Green Card)](#tabela-de-instrucoes-green-card)  
+6. [Tabela de Instruções (Green Card)](6-#tabela-de-instrucoes)  
 7. [Exemplos de Codificação](#7-exemplos-de-codificação)  
 8. [Desvios na ISA](#8-desvios-na-isa)  
 
@@ -156,7 +156,7 @@ A ISA deve permitir a implementação em nível de assembly de:
 - **Laços** (*FOR*, *WHILE*): usando decremento/incremento de registrador e BEQ/BNE para controle de repetição.  
 - **Chamadas de função**: passagem de parâmetros em registradores, uso de R3 como *link* ou ponteiro de pilha, e retorno via salto incondicional (BEQ R0,R0) ou Jext.  
 
-## 3. Decisões de Projeto e Trade-offs
+## 3. Decisões de Projeto 
 
 ### 3.1 Quantidade de registradores: 4 vs 8  
 - **8 registradores (3 bits)**  
@@ -387,7 +387,7 @@ imm3 = 110₂ (–2)
 sign-extend12 = 111111111110₂ (–2)
 ```
 
-## 6. Tabela de Instruções (Green Card)
+## 6. Tabela de Instruções 
 
 ### 6.1 Instruções R-type (opcode = `000`)
 
