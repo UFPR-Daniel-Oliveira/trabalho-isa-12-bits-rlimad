@@ -14,7 +14,7 @@
 3. [Decisões de Projeto e Trade-offs](#3-decisoes-de-projeto)  
 4. [Conjunto de Registradores](#4-conjunto-de-registradores)  
 5. [Formatos de Instrução](#5-formatos-de-instrução)  
-6. [Tabela de Instruções (Green Card)](6-#tabela-de-instrucoes)  
+6. [Tabela de Instruções (Green Card)](#6-tabela-de-instrucoes)  
 7. [Exemplos de Codificação](#7-exemplos-de-codificação)  
 8. [Desvios na ISA](#8-desvios-na-isa)  
 
