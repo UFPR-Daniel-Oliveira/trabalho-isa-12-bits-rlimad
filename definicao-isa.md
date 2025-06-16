@@ -50,8 +50,7 @@ A ISA proposta apresenta:
 - Quatro **formatos** principais:  
   1. **R-type:** operações entre registradores (ADD, SUB, AND, OR, XOR, SHL, SHR, NOP).  
   2. **I-type:** registrador + imediato (ADDI, SUBI) ou acesso a memória (LD, STR) com imediato de 3 bits (–4..+3).  
-  3. **J-type curto:** desvio condicional (BEQ, BNE) com offset de 3 bits.  
-  4. **Jext (opcional):** salto incondicional de 9 bits (–256..+255).  
+  3. **J-type curto:** desvio condicional (BEQ, BNE) com offset de 3 bits.    
 - Processo de **sign-extend** para estender immediatos e offsets a 12 bits.  
 
 ---
@@ -148,7 +147,7 @@ Para satisfazer os requisitos do enunciado, a ISA deve incluir:
 - **Instruções lógicas**: AND, OR, XOR.  
 - **Instruções de shift**: SHL (left), SHR (right).  
 - **Instruções de desvio condicional**: BEQ, BNE.  
-- **Instruções de salto**: uso de BEQ R0,R0 para salto curto; opcionalmente, Jext para salto longo.  
+- **Instruções de salto**: uso de BEQ R0,R0 para salto curto.
 - **Instruções de memória**: LD (load de 12 bits), STR (store de 12 bits).  
 
 ### 2.8 Suporte a estruturas de programação  
@@ -183,10 +182,10 @@ Com 2 bits por registrador, num R-type:
 ### 3.2 Convenção de uso dos registradores (R0…R3)  
 | Registrador | Índice | Uso principal                 | Saved      |
 |:-----------:|:------:|:------------------------------|:----------:|
-| **R0**      | `00`   | Zero constante (sempre 0)      | —          |
-| **R1**      | `01`   | T0 (temporário)                | Caller-saved |
-| **R2**      | `10`   | T1 (temporário)                | Caller-saved |
-| **R3**      | `11`   | SP / A0 (pilha)    | Callee-saved |
+| **R0**      | `00`   | T0 (temporário)      | —          |
+| **R1**      | `01`   | T1 (temporário)                | Caller-saved |
+| **R2**      | `10`   | T2 (temporário)                | Caller-saved |
+| **R3**      | `11`   | SP / A0 (pilha)                | Caller-saved |
 
 Quando escrevemos **sub-rotinas** (funções), precisamos decidir quem preserva o conteúdo dos registradores:
 
@@ -197,8 +196,6 @@ Quando escrevemos **sub-rotinas** (funções), precisamos decidir quem preserva 
 - **Callee-saved** (salvo pela função chamada):
   - Registradores que a **função chamada** deve preservar. Se a função for usar, ela mesma salva e restaura antes de retornar.
   - **R3** (SP / A0) é callee-saved, garantindo que o chamador possa confiar nele sem precisar salvar antes.
-
-- **R0** é sempre zero e não precisa ser salvo.
 
 ### 3.3 Distribuição de bits em 12 bits  
 Para caber R-type, I-type e J-type em 12 bits, reservamos:
@@ -211,12 +208,11 @@ Para caber R-type, I-type e J-type em 12 bits, reservamos:
 
 Em todas as instruções, contamos de **bit 11** (mais significativo) até **bit 0** (menos significativo). 
 
-| Formato   | Bits [11..9]     | Bits [8..6]             | Bits [5..4]   | Bits [3..2]   | Bits [1..0]       |
-|:---------:|:----------------:|:-----------------------:|:-------------:|:-------------:|:-----------------:|
-| **R-type**| opcode (3 bits)  | `funct3` (3 bits)       | `rd` (2 bits) | `rs` (2 bits) | `rt` (2 bits)     |
-| **I-type**| opcode (3 bits)  | `rd` (2 bits)           | `rs` (2 bits) | `imm3` (3 bits)| **pad** (2 bits)  |
-| **J-type**| `110` (3 bits)   | `cond` (1 bit) + `rs` (2 bits) | `rt` (2 bits) | `off3` (3 bits) | **pad** (1 bit)  |
-| **Jext**  | `111` (3 bits)   | **offset9** (9 bits)    | —             | —             | —                 |
+| Formato   | Bits [11..9]     | Bits [8..6]             | Bits [5..4]                       | Bits [3..2]   | Bits [1..0]       |
+|:---------:|:----------------:|:-----------------------:|:---------------------------------:|:-------------:|:-----------------:|
+| **R-type**| `opcode` (3 bits)| `funct3` (3 bits)       | `rd` (2 bits)                     | `rs` (2 bits) | `rt` (2 bits)     |
+| **I-type**| `opcode` (3 bits)| `imm3` (3 bits)         | `rd` (2 bits)                     | `rs` (2 bits) | `rt` (2 bits)     |
+| **J-type**| `opcode` (3 bits)| `off3` (3 bits)         | `codificação` (1 bit) + `0` (1 bit)| `rs` (2 bits) | `rt` (2 bits)     |
 
 - **opcode** (bits 11–9): identifica o formato/instrução.  
 - **funct3** (bits 8–6, em R-type): seleciona, dentro do grupo R, qual operação (ADD, SUB, AND...).  
@@ -225,7 +221,6 @@ Em todas as instruções, contamos de **bit 11** (mais significativo) até **bit
   - **rs** = Primeiro Registrador Fonte
   - **rt** = Segundo Registrador Fonte 
 - **imm3, off3** (3 bits): imediato ou deslocamento de –4..+3 (signed).  
-- **offset9** (9 bits): deslocamento de –256..+255 para Jext.
 - **pad** são bits reservados **sem função ativa** (sempre zero).  
   - Em I-type, **pad = bits [1..0]** sempre `00`.  
   - Em J-type, **pad = bit [0]** sempre `0`.  
@@ -349,17 +344,20 @@ ADD R1, R2, R3   # 000 000 01 10 11
 
 Imediato de 3 bits ou load/store (ADDI, SUBI, LD, STR):
 
-| Formato   | Bits [11..9]     | Bits [8..7]             | Bits [6..5]   | Bits [4..2]   | Bits [1..0]       |
-|:---------:|:----------------:|:-----------------------:|:-------------:|:-------------:|:-----------------:|
-| **I-type**| opcode (3 bits)  | `rd` (2 bits)           | `rs` (2 bits) | `imm3` (3 bits)| **pad** (2 bits)  |
+Imediato de 3 bits ou load/store (ADDI, SUBI, LD, STR):
 
-| Campo  | Bits  | Descrição                                   |
-| :----- | :---- | :------------------------------------------ |
-| opcode | 11..9 | `011`=ADDI, `100`=SUBI, `101`=LD, `110`=STR |
-| rd     | 8..7  | Registrador destino (ou fonte em STR)       |
-| rs     | 6..5  | Registrador base (ou fonte em ADDI/SUBI)    |
-| imm3   | 4..2  | Imediato com sinal (–4..+3)                 |
-| pad    | 1..0  | `00` (reservado para extensão futura)       |
+| Formato   | Bits [11..9]       | Bits [8..6]      | Bits [5..4]                                    | Bits [3..2]                                           | Bits [1..0]                                             |
+|:---------:|:------------------:|:----------------:|:----------------------------------------------:|:-----------------------------------------------------:|:------------------------------------------------------:|
+| **I-type**| `opcode` (3 bits)  | `imm3` (3 bits)  | `rd` (2 bits)                                  | `rs` (2 bits)                                         | `rt` (2 bits)                                           |
+
+
+| Campo  | Bits  | Descrição                                                                   |
+| :----- | :---- | :--------------------------------------------------------------------------- |
+| opcode | 11..9 | `011` = ADDI, `100` = SUBI, `101` = LD, `110` = STR                          |
+| imm3   | 8..6  | Imediato com sinal (–4..+3)                                                 |
+| rd     | 5..4  | Registrador destino (para ADDI, SUBI e LD); **não usado** em STR            |
+| rs     | 3..2  | Registrador fonte (para ADDI/SUBI) / Registrador base (para LD/STR)         |
+| rt     | 1..0  | Registrador fonte (para STR); **não usado** em ADDI, SUBI e LD (reservado)  |
 
 **Exemplo:**
 ```asm
@@ -370,32 +368,18 @@ ADDI R2, R1, -2  # 011 10 01 110 00
 
 Branch condicional BEQ/BNE com offset de 3 bits:
 
-| Formato   | Bits [11..9]     | Bits [8..6]             | Bits [5..4]   | Bits [3..1]   | Bits [0]       |
-|:---------:|:----------------:|:-----------------------:|:-------------:|:-------------:|:-----------------:|
-| **J-type**| `110` (3 bits)   | `cond` (1 bit) + `rs` (2 bits) | `rt` (2 bits) | `off3` (3 bits) | **pad** (0)  |
+| Formato   | Bits [11..9]       | Bits [8..6]      | Bits [5..4]                           | Bits [3..2]   | Bits [1..0]       |
+|:---------:|:------------------:|:----------------:|:-------------------------------------:|:-------------:|:-----------------:|
+| **J-type**| `opcode` (3 bits)  | `off3` (3 bits)  | `codificação` (1 bit) + `0` (1 bit)   | `rs` (2 bits) | `rt` (2 bits)     |
 
 **Exemplo:**
 ```asm
 BNE R0, R1, -1  # 110 1 00 01 111 0
 ```
 
-### 5.4 Formato Jext
-
-Salto incondicional longo com offset de 9 bits:
-
-| Formato   | Bits [11..9]     | Bits [8..0]             | 
-|:---------:|:----------------:|:-----------------------:|
-| **Jext**  | `111` (3 bits)   | **offset9** (9 bits)    | 
-
-**Exemplo:**
-```asm
-JUMP +50       # 111 000110010
-```
-
 ### 5.5 Sign-extrend de Imediato/Offset
 
 - **imm3, off3** (3 bits → 12 bits): repetir o bit de sinal (b₂) em [11..3].
-- **offset9** (9 bits → 12 bits): repetir o bit de sinal (b₈) em [11..9].
 
 **Exemplo:**
 ```text
@@ -416,44 +400,29 @@ sign-extend12 = 111111111110₂ (–2)
 | `100`  | `XOR rd, rs, rt`| `000 100 rd rs rt`          | `R[rd] = R[rs] ^ R[rt]`                   |
 | `101`  | `SHL rd, rs, rt`| `000 101 rd rs rt`          | `R[rd] = R[rs] << (R[rt] & 0xF)`          |
 | `110`  | `SHR rd, rs, rt`| `000 110 rd rs rt`          | `R[rd] = R[rs] >> (R[rt] & 0xF)`          |
-| `111`  | `NOP`           | `000 111 00 00 00`          | sem operação (PC ← PC + 1)                |
-
 ---
 
-### 6.2 Instruções I-type (opcode = `011`, `100`, `101`, `110`)
+### 6.2 Instruções I-type (opcode = `001`, `010`, `011`, `100`)
 
-| opcode | Instrução                   | Codificação (12 bits)       | Semântica                                                      |
-|:------:|:----------------------------|:----------------------------|:---------------------------------------------------------------|
-| `011`  | `ADDI rd, rs, imm3`         | `011 rd rs imm3 00`         | `R[rd] = R[rs] + signext(imm3)`                                |
-| `100`  | `SUBI rd, rs, imm3`         | `100 rd rs imm3 00`         | `R[rd] = R[rs] - signext(imm3)`                                |
-| `101`  | `LD rd, [rs + imm3]`        | `101 rd rs imm3 00`         | `R[rd] = MEM[R[rs] + signext(imm3)]`                           |
-| `110`  | `STR rd, [rs + imm3]`       | `110 rd rs imm3 00`         | `MEM[R[rs] + signext(imm3)] = R[rd]`                           |
+| opcode | Instrução              | Codificação (12 bits) | Semântica                            |
+| :----: | :--------------------- | :-------------------- | :----------------------------------- |
+|  `001` | `ADDI rd, rs, imm3`    | `001 imm3 rd rs 00`   | `R[rd] = R[rs] + signext(imm3)`      |
+|  `010` | `SUBI rd, rs, imm3`    | `010 imm3 rd rs 00`   | `R[rd] = R[rs] - signext(imm3)`      |
+|  `011` | `LD   rd, [rs + imm3]` | `011 imm3 rd rs 00`   | `R[rd] = MEM[R[rs] + signext(imm3)]` |
+|  `100` | `STR  rt, [rs + imm3]` | `100 imm3 00 rs rt`   | `MEM[R[rs] + signext(imm3)] = R[rt]` |
 
----
+### 6.3 Instruções J-type curto (opcode = `101`)
 
-### 6.3 Instruções J-type curto (opcode = `110`)
-
-| cond | Instrução                | Codificação (12 bits)       | Semântica                                                          |
-|:----:|:-------------------------|:----------------------------|:-------------------------------------------------------------------|
-| `0`  | `BEQ rs, rt, off3`       | `110 0 rs rt off3 0`        | if `R[rs] == R[rt]` then `PC += signext(off3)` else `PC += 1`      |
-| `1`  | `BNE rs, rt, off3`       | `110 1 rs rt off3 0`        | if `R[rs] != R[rt]` then `PC += signext(off3)` else `PC += 1`      |
+| cond | Instrução          | Codificação (12 bits) | Semântica                                                     |
+| :--: | :----------------- | :-------------------- | :------------------------------------------------------------ |
+|  `0` | `BEQ rs, rt, off3` | `101 off3 0 0 rs rt`  | if `R[rs] == R[rt]` then `PC += signext(off3)` else `PC += 1` |
+|  `1` | `BNE rs, rt, off3` | `101 off3 1 0 rs rt`  | if `R[rs] != R[rt]` then `PC += signext(off3)` else `PC += 1` |
 
 > **Nota:** salto incondicional curto pode usar `BEQ R0, R0, off3`.
 
----
-
-### 6.4 Instrução Jext (opcode = `111`, opcional)
-
-| Instrução             | Codificação (12 bits)   | Semântica                                    |
-|:----------------------|:------------------------|:---------------------------------------------|
-| `JUMP offset9`        | `111 offset9`           | `PC += signext9(offset9)`                    |
-
-> **offset9** é signed 9 bits (–256..+255).
-
----
 
 **Legenda:**  
-- `opcode`, `funct3`, `cond`, `rd`, `rs`, `rt`, `imm3`, `off3`, `offset9` mostram apenas os campos; cada `rd`, `rs`, `rt` representa 2 bits para índices 00..11 (R0..R3).  
+- `opcode`, `funct3`, `cond`, `rd`, `rs`, `rt`, `imm3`, `off3` mostram apenas os campos; cada `rd`, `rs`, `rt` representa 2 bits para índices 00..11 (R0..R3).  
 - `signext(...)` = estender o bit de sinal ao múltiplo de 12 bits.
 
 ## 7. Exemplos de Codificação
@@ -485,56 +454,44 @@ Para cada instrução, seguimos estes passos:
 
 ### 7.2 `ADDI R2, R1, -2` (I-type)
 
-1. **Formato**: I-type → `opcode = 011` (bits 11..9)  
-2. **rd**: R2 → `10` (bits 8..7)  
-3. **rs**: R1 → `01` (bits 6..5)  
-4. **imm3**: -2 → em 3 bits signed:  
-   - +2 = `010`, então -2 = complemento de dois = `110` (bits 4..2)  
-5. **pad**: sempre `00` (bits 1..0)  
+1. **Formato**: Formato: I-type → opcode (3) │ imm3 (3) │ rd (2) │ rs (2) │ rt (2)
+2. **opcode**: R2 → `10` (bits 8..7)  
+3. **imm3**: –2 → em 3 bits signed:
+   +2 = 010 → –2 = dois-complemento → 110 (bits 8..6)
+4. **rd**: R2 → 10 (bits 5..4)  
+5. **rs**: R1 → 01 (bits 3..2)
+6. **rt**: reservado → 00 (bits 1..0)
 
-| Campo   | Valor Decimal/Binário | Bits  |  
-|:--------|:----------------------:|:------|  
-| opcode  | 3 → `011`              | 11..9 |  
-| rd      | 2 → `10`               |  8..7 |  
-| rs      | 1 → `01`               |  6..5 |  
-| imm3    | -2 → `110`             |  4..2 |  
-| pad     | — → `00`               |  1..0 |  
+|  Campo | Valor |  Bits |
+| :----: | :---: | :---: |
+| opcode | `011` | 11..9 |
+|  imm3  | `110` |  8..6 |
+|   rd   |  `10` |  5..4 |
+|   rs   |  `01` |  3..2 |
+|   rt   |  `00` |  1..0 |
 
-**Concatenação**: 011 10 01 110 00 = 011100111000₂
+**Concatenação**: 011 110 10 01 00 = 011110100100
 
-### 7.3 `BNE R0, R1, -1` (J-type curto)
+### 7.3 `BNQ R0, R1, -1` (J-type curto)
 
-1. **Formato**: J-type curto → `opcode = 110` (bits 11..9)  
-2. **cond**: BNE → `1` (bit 8)  
-3. **rs**: R0 → `00` (bits 7..6)  
-4. **rt**: R1 → `01` (bits 5..4)  
-5. **off3**: -1 → em 3 bits signed: `111` (bits 3..1)  
-6. **pad**: sempre `0` (bit 0)  
+1. **Formato**: J-type curto → opcode | off3 | codificação | pad=0 | rs | rt
+2. **opcode**: BNQ → `101` (bits 11..9)
+3. **off3**: –1 → em 3 bits signed: 111 (bits 8..6)
+4. **condição**: cond = 1 (bit 5)
+5. **pad**: sempre 0 (bit 4)
+6. **rs**: R0 → 00 (bits 3..2)
+7. **rt**: R1 → 01 (bits 1..0)
 
-| Campo   | Valor Decimal/Binário | Bits  |  
-|:--------|:----------------------:|:------|  
-| opcode  | 6 → `110`              | 11..9 |  
-| cond    | BNE → `1`              |     8 |  
-| rs      | 0 → `00`               |  7..6 |  
-| rt      | 1 → `01`               |  5..4 |  
-| off3    | -1 → `111`             |  3..1 |  
-| pad     | — → `0`                |     0 |  
+|      Campo      | Valor |  Bits |
+| :-------------: | :---: | :---: |
+|    **opcode**   | `101` | 11..9 |
+|     **off3**    | `111` |  8..6 |
+| **codificação** |  `1`  |   5   |
+|     **pad**     |  `0`  |   4   |
+|      **rs**     |  `00` |  3..2 |
+|      **rt**     |  `01` |  1..0 |
 
-**Concatenação**: 110 1 00 01 111 0 = 110100011110₂
-
-### 7.4 `JUMP +50` (Jext)
-
-1. **Formato**: Jext → `opcode = 111` (bits 11..9)  
-2. **offset9**: +50 decimal → converter para 9 bits signed:  
-   - 50₁₀ = `00110010₂` (8 bits)  
-   - Em 9 bits: `0 00110010` → `000110010` (bits 8..0)  
-
-| Campo   | Valor Decimal/Binário  | Bits   |  
-|:--------|:-----------------------:|:-------|  
-| opcode  | 7 → `111`               | 11..9  |  
-| offset9 | +50 → `000110010`       |  8..0  |  
-
-**Concatenação**: 111 000110010 = 111000110010₂ 
+**Concatenação**: 101 111 1 0 00 01 = 101111100001₂
 
 ## 8. Implementações
 
