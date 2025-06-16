@@ -9,15 +9,15 @@
 
 # Sumário
 
-1. [Introdução](#1.Introdução)  
-2. [Requisitos e Restrições](#requisitos-e-restricoes)  
-3. [Decisões de Projeto e Trade-offs](#decisoes-de-projeto-e-trade-offs)  
-4. [Conjunto de Registradores](#conjunto-de-registradores)  
-5. [Formatos de Instrução](#formatos-de-instrucao)  
-6. [Tabela de Instruções (Green Card)](#tabela-de-instrucoes-green-card)  
-7. [Exemplos de Codificação](#exemplos-de-codificacao)  
-8. [Implementações](#implementacoes)
-   
+1. [Introdução](#1-introdução)  
+2. [Requisitos e Restrições](#2-requisitos-e-restrições)  
+3. [Decisões de Projeto e Trade-offs](#3-decisoes-de-projeto-e-trade-offs)  
+4. [Conjunto de Registradores](#4-conjunto-de-registradores)  
+5. [Formatos de Instrução](#5-formatos-de-instrução)  
+6. [Tabela de Instruções (Green Card)](#6-tabela-de-instrucoes-green-card)  
+7. [Exemplos de Codificação](#7-exemplos-de-codificação)  
+8. [Desvios na ISA](#8-desvios-na-isa)  
+
 ---
 
 ## 1. Introdução
@@ -493,79 +493,68 @@ Para cada instrução, seguimos estes passos:
 
 **Concatenação**: 101 111 1 0 00 01 = 101111100001₂
 
-## 8. Implementações
+## 8. Desvios na ISA
 
-### 8.1 Implementando IF/ELSE
+As instruções de desvio na nossa arquitetura utilizam o **formato J-type curto**, fornecendo saltos condicionais de curta distância (–4 a +3 instruções) em relação à próxima instrução. A codificação de 12 bits é organizada assim:
 
-```asm
-# if (R1 != 0) then … else …
-    BNE R1, R0, THEN_LABEL    # se R1 != 0, vá para THEN_LABEL
-    # bloco ELSE
-    …                        # instruções do else
-    BEQ R0, R0, END_IF       # pula o bloco then
-THEN_LABEL:
-    # bloco THEN
-    …                        # instruções do then
-END_IF:
-    # continua execução
-```
-- `BNE R1, R0, THEN_LABEL` faz salto condicional curto se `R1 != 0`.
-- `BEQ R0, R0, END_IF` é salto incondicional curto (sempre verdadeiro).
+| Bits [11..9]   | Bits [8..6]     | Bit [5]   | Bit [4] | Bits [3..2] | Bits [1..0] |
+|:--------------:|:---------------:|:---------:|:-------:|:-----------:|:-----------:|
+| **opcode (3)** | **off3 (3)**    | **cond** | **pad** | **rs (2)**  | **rt (2)**  |
 
-### 8.2 Construindo Loops (FOR / WHILE)
+- **opcode**: `101` (3 bits) indica instrução de desvio curto.  
+- **off3**: deslocamento relativo em dois-complemento (3 bits), valor entre –4 e +3, aplicado **em instruções**.  
+- **cond**: condição de ramificação (1 bit):  
+  - `0` → BEQ (branch if equal)  
+  - `1` → BNQ (branch if not equal)  
+- **pad**: sempre `0` (1 bit), reserva para extensões futuras.  
+- **rs**, **rt**: registradores de comparação (2 bits cada).
 
-**Exemplo** `FOR: for (i = 0; i < 10; i++) …`
+### Semântica de execução
 
-```asm
-    # inicializa i = 0
-    ADDI R2, R0, 0       # R2 = i
+1. **Busca**: a instrução de desvio é lida com PC apontando para seu endereço.  
+2. **Incremento primário**: internamente, o PC é incrementado em 1 para apontar à próxima instrução.  
+3. **Teste da condição**: compara `R[rs]` e `R[rt]`.  
+4. **Cálculo do alvo**: `target = PC + signext(off3)`. Note que o PC já avançou em 1 antes de aplicar o offset.  
+5. **Atualização do PC**:  
+   - Se a condição (`BEQ` ou `BNQ`) for satisfeita, `PC ← target`.  
+   - Caso contrário, `PC` permanece apontando para a próxima instrução (já incrementado).
 
-LOOP:
-    # testa i < 10  → se i == 10, sai
-    SUBI R3, R2, 10      # R3 = i - 10
-    BEQ  R3, R0, END_LOOP  # se R3 == 0, i == 10 → END_LOOP
+### Comportamento de loops
 
-    # corpo do loop
-    …                    # suas instruções aqui
+Saltos com `off3` negativo voltam a instruções anteriores, permitindo loops pequenos sem instruções adicionais. Por exemplo, um `BNQ` com `off3 = –2` retorna duas instruções antes do fim do loop. Essa abordagem elimina a necessidade de cálculos de endereço absoluto para grandes blocos de código, mas limita a distância de salto ao alcance de 3 instruções à frente ou 4 atrás. 
 
-    # incrementa i
-    ADDI R2, R2, 1       # i++
+### 8.1 Exemplos básicos
 
-    # salto de volta ao início do loop
-    BEQ  R0, R0, LOOP    # salto incondicional curto
-
-END_LOOP:
-    # continua execução
-```
-
-### 8.3 Chamadas de Função
-
-**Convenção:**
-
-- Parâmetros em R1, R2.
-- Retorno em R1.
-- SP em R3 (caller/callee-saved conforme definido).
+#### 8.1.1 BEQ para pular adiante
 
 ```asm
-# --- Chamador ---
-    ADDI R1, R0, X       # 1º argumento = X
-    ADDI R2, R0, Y       # 2º argumento = Y
-    BEQ  R0, R0, FUNC    # call FUNC (short jump)
-
-    # após retorno, resultado em R1
-    …                    # usa R1
-
-# --- Função FUNC ---
-FUNC:
-    # corpo da função — por exemplo, soma:
-    ADD   R1, R1, R2     # R1 = arg1 + arg2
-
-    # retorno:
-    BEQ   R0, R0, RET    # jump curto de volta
-
-RET:
-    # volta para o chamador
+   ; Objetivo: se R1 == R2, pular a próxima ADDI
+   ; BEQ R1,R2, +1 → off3 = 001
+   101 001 0 0 01 10  ; BEQ R1,R2, +1
+   011 001 01 01 00  ; ADDI R1,R1, +1
 ```
+- BEQ: opcode=101, off3=001, cond=0, pad=0, rs=01, rt=10 → 10100100110₂
+- Se R1 == R2, o PC pula o ADDI; caso contrário, executa o ADDI.
 
-- A função escreve o resultado em R1 e faz salto curto de volta ao rótulo `RET`.
-- O chamador sabe que, após o `BEQ R0,R0, FUNC`, a próxima instrução a executar (no `RET`) é logo após esse `BEQ`.
+#### 8.1.2 BNQ para loop curto
+
+```asm
+   ; Objetivo: repetir enquanto R1 != R3 (–2 instruções)
+   ; BNQ R1,R3, –2 → off3 = 110
+   101 110 1 0 01 11  ; BNQ R1,R3, –2
+```
+- BNQ: opcode=101, off3=110, cond=1, pad=0, rs=01, rt=11 → 10111010111₂
+- Se R1 != R3, PC ← PC₀ + signext(–2) (volta 2 instruções); caso contrário, segue.
+
+#### 8.1.3  Loop completo: escrever 3 valores
+
+```asm
+   ; Inicializa contador R3 = 3
+   011 011 11 00 00  ; ADDI R3,R0,+3
+   
+   loop:
+   100 000 00 10 00  ; STR R0,[R2+0]
+   011 001 00 00 00  ; ADDI R0,R0,+1
+   101 110 1 0 00 10 ; BNQ R0,R3,–2   ; volta ao STR se R0 != R3
+```
+- O BNQ com off3 = –2 repete o armazenamento até R0 == R3.
