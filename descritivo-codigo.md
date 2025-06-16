@@ -1,6 +1,6 @@
 ## Descritivo de Codificação do Loop de Duas Fases
 
-A seguir mostramos, instrução a instrução, como transformar cada linha de assembly em sua forma binária de 12 bits e em hexadecimal.
+A seguir mostramos, instrução a instrução, como transformar cada linha de assembly em sua forma binária de 12 bits e em hexadecimal, partindo do pressuposto de explorarmos a capacidade da ISA, por meio das operações de adição e jump. 
 
 ---
 
@@ -125,7 +125,7 @@ A seguir mostramos, instrução a instrução, como transformar cada linha de as
 
     contador += 3;
 
-    // Loop B: preenche b[3..5]
+    // Loop B: preenche b[0..2]
     for (int k = 0; i < contador; k++, i++)
         b[k] = i;
 
@@ -133,6 +133,9 @@ A seguir mostramos, instrução a instrução, como transformar cada linha de as
 }
 
 ```
+
+> **Observação:**  
+> Para fins demonstrativos, o endereço lógico de B é contiguo ao endereço de A
 
 ### Código em Assembly
 
