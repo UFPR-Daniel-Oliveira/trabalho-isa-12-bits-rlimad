@@ -11,10 +11,10 @@
 
 1. [Introdução](#1-introdução)  
 2. [Requisitos e Restrições](#2-requisitos-e-restrições)  
-3. [Decisões de Projeto e Trade-offs](#3-decisoes-de-projeto)  
+3. [Decisões de Projeto](#3-decisoes-de-projeto)  
 4. [Conjunto de Registradores](#4-conjunto-de-registradores)  
 5. [Formatos de Instrução](#5-formatos-de-instrução)  
-6. [Tabela de Instruções (Green Card)](#6-tabela-de-instrucoes)  
+6. [Tabela de Instruções](#6-tabela-de-instrucoes)  
 7. [Exemplos de Codificação](#7-exemplos-de-codificação)  
 8. [Desvios na ISA](#8-desvios-na-isa)  
 
@@ -99,47 +99,9 @@ A CPU segue o modelo *load/store*:
 - **ULA**: opera em palavras de 12 bits, realizando soma, subtração, lógicas e shifts em 12 bits, com resultado truncado a 12 bits.  
 - Todos os dados internos e os caminhos do datapath (barramentos, registradores, ALU) têm largura de 12 bits.
 
-### 2.6 Endereçamento de memória  
-m nossa ISA, cada **palavra** (word) tem **12 bits** e, conceitualmente, tanto a **memória de instruções** quanto a **memória de dados** são _word-addressable_ (um índice → um word de 12 bits).  
-Porém, no **Logisim-evolution** não existe memória nativa de 12 bits: você só encontra memórias de **8 bits** (byte-addressable) ou, opcionalmente, memórias configuráveis para **16 bits**. Para implementar nosso modelo:
+### 2.6 Endereçamento de memória
 
-1. **Usando memória de 16 bits**  
-   - Configure a RAM/ROM para 16 bits de largura por célula.  
-   - Cada endereço retorna 16 bits; **usamos apenas 12** dos bits (por exemplo, os 12 mais significativos) e ignoramos ou deixamos fixos os 4 bits excedentes.  
-   - **Não há conversão de endereço**: se o registrador contém o índice de word (0, 1, 2…), basta usá-lo diretamente como endereço.
-
-2. **Usando memória de 8 bits (byte-addressable)**  
-   - Cada célula armazena apenas 8 bits.  
-   - Para guardar uma palavra de 12 bits, precisamos **2 bytes** (2 × 8 bits = 16 bits), sobrando 4 bits.  
-   - **Mapeamento de endereço**:  
-     - O registrador calcula um **índice de word** (0, 1, 2…).  
-     - Para converter em **índice de byte**, multiplicamos por 2:
-       
-       ```text
-       byte_address = word_address * 2
-       ```  
-     - Exemplo: se `word_address = 5`, então  
-       - primeiro byte em `byte_address = 5 * 2 = 10`  
-       - segundo byte em `byte_address + 1 = 11`
-
-#### Por que multiplicar por 2?
-
-- Porque estamos embalando cada word de 12 bits em **2 bytes** sequenciais.  
-- A memória de 8 bits usa índices de byte, e cada palavra ocupa dois desses índices.  
-- Assim, todo acesso a word (load/store) segue:
-  
-  ```c
-  word_index   = R[rs] + signExtend(offset3);
-  byte_address = word_index * 2;    // converte word → byte
-  // então lê/escreve nos dois bytes consecutivos e remonta o valor de 12 bits
-  ```
-  
-#### Por que 16 bits?
-
-- Porque 16 bits (2 bytes) é o mínimo que acomoda nossos 12 bits de forma contígua.  
-- O Logisim não tem memórias de 12 bits “prontas”, então usamos 16 bits e reservamos 4 bits extras (ignorados ou sempre zero).
-
-Dessa forma, mantemos a visão conceitual de memória word-addressable de 12 bits, enquanto respeitamos as restrições físicas do Logisim.
+Nesta implementação no Logisim-evolution, usamos módulos de ROM e RAM com **12 bits** de largura por endereço. Cada endereço acessa diretamente uma palavra de 12 bits, sem necessidade de mapeamento de bytes ou cálculos adicionais de índice.
 
 ### 2.7 Conjunto mínimo de instruções  
 Para satisfazer os requisitos do enunciado, a ISA deve incluir:  
@@ -179,13 +141,18 @@ Com 2 bits por registrador, num R-type:
 
 **Escolha final**: 4 registradores, para equilibrar flexibilidade de instrução e alcance de imediato/offset em 12 bits.
 
-### 3.2 Convenção de uso dos registradores (R0…R3)  
-| Registrador | Índice | Uso principal                 | Saved      |
-|:-----------:|:------:|:------------------------------|:----------:|
-| **R0**      | `00`   | T0 (temporário)      | —          |
-| **R1**      | `01`   | T1 (temporário)                | Caller-saved |
-| **R2**      | `10`   | T2 (temporário)                | Caller-saved |
-| **R3**      | `11`   | SP / A0 (pilha)                | Caller-saved |
+### 3.2 Convenção de uso dos registradores
+
+| Registrador | Índice (bin) | Uso principal                                     | Salvo           |
+|:-----------:|:------------:|:--------------------------------------------------|:---------------:|
+| **R0**      | `00`         | Zero constante (sempre 0)                         | —               |
+| **R1**      | `01`         | Temporário / 1º argumento / valor de retorno      | Caller-saved    |
+| **R2**      | `10`         | Temporário / 2º argumento                         | Caller-saved    |
+| **R3**      | `11`         | Stack Pointer (SP) em words de 12 bits            | Callee-saved    |
+
+- **R0** sempre lê como zero; escritas são ignoradas.  
+- **R1** e **R2** são usados como registradores temporários ou para passagem de parâmetros. Como _caller-saved_, cabe ao chamador salvar/restaurar seus valores antes e após chamadas de função.  
+- **R3** atua como ponteiro de pilha (_stack pointer_) e registrador de retorno. Sendo _callee-saved_, a função chamada deve preservar seu valor (salvando e restaurando, se modificá-lo).  
 
 Quando escrevemos **sub-rotinas** (funções), precisamos decidir quem preserva o conteúdo dos registradores:
 
@@ -235,9 +202,7 @@ Em todas as instruções, contamos de **bit 11** (mais significativo) até **bit
 2. **I-type (3 bits opcode + 2×2 bits registradores + 3 bits immed.)**  
    - Suporta ADDI, SUBI e load/store com imediato de ±4. O padding de 2 bits permite futuras extensões.  
 3. **J-type curto (opcode=`110`)**  
-   - BEQ/BNE em um único formato, usando 1 bit para condição e 3 bits de offset (±4 instruções).  
-4. **Jext opcional (opcode=`111` + 9 bits offset)**  
-   - Para saltos mais longos (±256 instruções) sem encadear vários BEQ.  
+   - BEQ/BNE em um único formato, usando 1 bit para condição e 3 bits de offset (±4 instruções).   
 
 ## 4. Conjunto de Registradores
 
@@ -307,12 +272,6 @@ LD   Rn, [R3 + 0]    # Rn ← MEM[word = SP]
 ADDI R3, R3, +1      # SP ← SP + 1
 ```
 
-- No **Logisim** , a memória é byte-addressable (8 bits por célula). Cada word de 12 bits ocupa 2 bytes (16 bits físicos), sobrando 4 bits não usados. Internamente, o datapath faz:
-
-```ini
-byte_address = word_address * 2
-```
-
 logo, só precisa usar `STR/LD [R3+imm3]` em assembly.
 
 ## 5. Formatos de Instrução
@@ -341,8 +300,6 @@ ADD R1, R2, R3   # 000 000 01 10 11
 ```
 
 ### 5.2 Formato I-type
-
-Imediato de 3 bits ou load/store (ADDI, SUBI, LD, STR):
 
 Imediato de 3 bits ou load/store (ADDI, SUBI, LD, STR):
 
