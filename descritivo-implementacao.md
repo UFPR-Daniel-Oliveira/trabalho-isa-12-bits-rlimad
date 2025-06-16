@@ -52,11 +52,22 @@ Este documento descreve as principais decisões de projeto da ISA de 12 bits e e
 ### 2.3 Unidade de Controle (Control Unit)  
 - **Tipo:** Lógica combinacional  
 - **Função:** Gera sinais de controle a partir de `opcode`, `funct3` e `cond`:  
-  - `WBReg` (write-back enable)  
-  - `MuxULA` (seleção de imediato vs registrador)  
-  - `OpULA` (seletor de operação na ALU)  
-  - `MemRead` / `MemWrite` (para RAM)  
-  - `PCsel` (seleção de branch vs PC+1)
+
+| opcode | opULA | WBReg | ALUSrc (MuxULA) | dado_breg | signal_control | PCSel |
+|:------:|:-----:|:-----:|:---------------:|:--------:|:--------:|:-----:|
+| R-type `000`  | `000` | 1     | 0               | 0        | 0        | 0     |
+| addi `001`  | `001` | 1     | 1               | 0        | 0        | 0     |
+|  subi `010`  | `010` | 1     | 1               | 0        | 0        | 0     |
+| ld `011`  | `100` | 1     | 1               | 1        | 0        | 0     |
+| store `100`  | `101` | 0     | 1               | 0        | 1        | 0     |
+| j-type`101`  | `111` | 0     | 0               | 0        | 0        | 1     |
+
+- **WBReg** (Write-Back Enable): habilita gravação no Banco de Registradores.  
+- **ALUSrc** (MuxULA): 0 = operando B vem de registrador, 1 = vem de imediato/offset.  
+- **dado-breg**: 1 = dado de memória vai para write-back; 0 = resultado da ALU.  
+- **signal-control**: habilita gravação na RAM (`STR`).  
+- **PCSel**: 1 = PC ← (PC+1) + signext(off3) (branch); 0 = PC ← PC + 1.  
+
 
 ### 2.4 Banco de Registradores (RegFile)  
 - **Tipo:** 4 × 12 bits, 2 portas de leitura, 1 porta de escrita  
